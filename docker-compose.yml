@@ -1,0 +1,24 @@
+services:
+  holder-backend:
+    container_name: holder-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/data:/app/data
+    restart: unless-stopped
+
+  holder-frontend:
+    container_name: holder-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - holder-backend
+    restart: unless-stopped

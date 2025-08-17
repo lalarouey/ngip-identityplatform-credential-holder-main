@@ -1,0 +1,54 @@
+{
+  "name": "identity-platform-backend",
+  "private": true,
+  "version": "1.0.0",
+  "main": "src",
+  "license": "MIT",
+  "engines": {
+    "node": "20.17.0"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.8",
+    "eslint": "^9.20.1",
+    "globals": "^15.15.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0"
+  },
+  "dependencies": {
+    "@veramo/core": "^6.0.0",
+    "@veramo/credential-w3c": "^6.0.0",
+    "@veramo/data-store": "^6.0.0",
+    "@veramo/did-comm": "^6.0.0",
+    "@veramo/did-jwt": "^6.0.0",
+    "@veramo/did-manager": "^6.0.0",
+    "@veramo/did-provider-ethr": "^6.0.0",
+    "@veramo/did-resolver": "^6.0.0",
+    "@veramo/key-manager": "^6.0.0",
+    "@veramo/kms-local": "^6.0.0",
+    "bottleneck": "^2.19.5",
+    "cors": "^2.8.5",
+    "ethers": "^6.13.5",
+    "ethr-did-resolver": "^11.0.3",
+    "express": "^4.21.2",
+    "lru-cache": "^11.1.0",
+    "pinata": "^1.10.1",
+    "pinata-web3": "^0.5.4",
+    "socket.io": "^4.8.1",
+    "sqlite3": "^5.1.7",
+    "typeorm": "^0.3.20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "generateKey": "npx @veramo/cli config create-secret-key",
+    "lint": "npx eslint . --fix",
+    "identifiers": "tsx ./devUtils/listIdentifiers.ts",
+    "addresses": "tsx ./devUtils/listAddresses.ts",
+    "start": "tsx ./src/server/server.ts",
+    "initDID": "tsx ./src/init.ts"
+  }
+}
