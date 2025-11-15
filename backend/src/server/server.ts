@@ -1,17 +1,17 @@
-import { VerifiableCredential } from '@veramo/core';
-import cors from 'cors';
-import { ethers } from 'ethers';
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import sqlite3 from 'sqlite3';
-import { allowedOrigins } from '../config.js';
-import { execute } from '../ipfsRegister.js';
+import "reflect-metadata";
+import { VerifiableCredential } from "@veramo/core";
+import cors from "cors";
+import { ethers } from "ethers";
+import express, { Request, Response } from "express";
+import http from "http";
+import sqlite3 from "sqlite3";
+import { allowedOrigins } from "../config.js";
+import { execute } from "../ipfsRegister.js";
 import {
   challengeResponse,
   verifyOwnership,
-} from '../server/holderRequests.js';
-import { getSchema, getSchemaNames } from '../server/schemaRequests.js';
+} from "../server/holderRequests.js";
+import { getSchema, getSchemaNames } from "../server/schemaRequests.js";
 import {
   checkRevocationStatus,
   getVCs,
@@ -21,213 +21,354 @@ import {
   requestVCWithPhysicalVerification,
   selfIssueVC,
   verifyVC,
-} from '../server/VcRequests.js';
+} from "../server/VcRequests.js";
 import {
   clearDID,
   getEthAddress,
+  initializeAllDIDs,
   initializeDID,
   transferFunds,
-} from '../utils.js';
-import { getAgent } from '../veramo/agents.js';
-import { ethSepoliaProvider } from '../veramo/providers.js';
-import { handleServiceResponse, requestService } from './serviceRequests.js';
+} from "../utils.js";
+import { getAgent } from "../veramo/agents.js";
+import { ethSepoliaProvider } from "../veramo/providers.js";
+import { handleServiceResponse, requestService } from "./serviceRequests.js";
+import { resolveDIDCommMessage } from "src/didcomm.js";
+import { Server } from "socket.io";
 
-export const agent = await getAgent();
+export const agent = await getAgent({
+  didProviderConfigs: [
+    {
+      method: "ethr",
+      name: "did:ethr:sepolia",
+      network: "sepolia",
+      registry: "0x03d5003bf0e79C5F5223588F347ebA39AfbC3818",
+      chainId: 11155111,
+      provider: ethSepoliaProvider,
+    },
+    { method: "web", name: "did:web" },
+  ],
+});
+
 const port = Number(process.env.PORT) || 3002;
 const app = express();
 const server = http.createServer(app);
-
 const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST'],
-  },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
-export const db = new sqlite3.Database('./data/IPFS.sqlite');
+
+// Database
+export const db = new sqlite3.Database("./data/IPFS.sqlite");
 await execute(
   db,
   `CREATE TABLE IF NOT EXISTS cids (
-  cid TEXT PRIMARY KEY,
-  vcID TEXT,
-  docID TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`,
-  [],
+    cid TEXT PRIMARY KEY,
+    vcID TEXT,
+    docID TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  []
 );
 
-app.use(cors());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
-const identifier = await agent.didManagerGetOrCreate({
-  alias: 'default',
+const ethIdentifier = await agent.didManagerGetOrCreate({
+  alias: "default",
+  provider: "did:ethr:sepolia",
 });
-const holderDID = identifier.did;
-const ethAddress = await getEthAddress(holderDID);
+const webIdentifier = await agent.didManagerGetOrCreate({
+  alias: "example.com",
+  provider: "did:web",
+});
 
-io.on('connection', socket => {
-  console.log('Holder connected:', socket.id);
+const holderDIDs = [ethIdentifier.did, webIdentifier.did];
+const ethAddress = await getEthAddress(ethIdentifier.did);
 
-  socket.on('identifier', async () => {
+export const didToSocketMap = new Map<string, any>();
+
+// const socket = io("http://localhost:3002");
+
+// socket.on("connect", () => {
+//   console.log("Connected as:", socket.id);
+//   socket.emit("register-did", "did:ethr:sepolia:0x021b59973fd47d895fc9c7ed9741ca4b8476360414001fc075abbac7c6d8cbd88a");
+// });
+
+// socket.on("ownership-challenge", ({ from, challenge }) => {
+//   console.log("Received challenge from:", from, "Challenge:", challenge);
+// });
+
+
+// io.on("connection", (socket) => {
+
+//   console.log("New socket connection:", socket.id);
+//   socket.on("register-did", (did) => {
+//     console.log("Registered DID:", did);
+//     didToSocketMap.set(did, {
+//       socket,
+//       timeout: setTimeout(() => {}, 0),
+//       challenge: "",
+//     });
+//   });
+
+//   socket.on("disconnect", () => {
+//     for (const [did, entry] of didToSocketMap.entries()) {
+//       if (entry.socket.id === socket.id) {
+//         didToSocketMap.delete(did);
+//         console.log(`DID ${did} disconnected.`);
+//       }
+//     }
+//   });
+
+//   socket.on("ownership-challenge", async ({ from, challenge }) => {
+//     console.log("Received ownership challenge from:", from);
+//     console.log("Challenge:", challenge);
+//     // Here you’d sign the challenge and send it back
+//     // e.g., via a POST to /prove-ownership or a socket event:
+//     // socket.emit("ownership-proof", { verifierDID: from, signedChallenge });
+//   });
+
+// });
+
+// Get DID identifiers + balance
+app.get("/identifiers", async (_req: Request, res: Response) => {
+  try {
     const balance = ethers.formatEther(
-      await ethSepoliaProvider.getBalance(ethAddress),
+      await ethSepoliaProvider.getBalance(ethAddress)
     );
-    socket.emit('identifier-info', holderDID, ethAddress, Number(balance));
-  });
+    res.json({
+      holderDIDs,
+      ethAddress,
+      balance: Number(balance),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch identifiers" });
+  }
+});
 
-  socket.on('disconnect', () => {
-    console.log('Holder disconnected:', socket.id);
-  });
-
-  socket.on('initialize-did', async (did: string) => {
+// Initialize DID
+app.post("/initialize-did", async (req: Request, res: Response) => {
+  const { did } = req.body;
+  try {
     await initializeDID(did);
-    socket.emit('did-initialized', did);
-  });
+    res.json({ message: "DID initialized", did });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to initialize DID" });
+  }
+});
 
-  socket.on('clear-did', async (did: string) => {
-    try {
-      await clearDID(did);
-      socket.emit('did-cleared', did);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to clear DID';
-      console.error(`[${new Date().toISOString()}] Error clearing DID:`, error);
-      socket.emit('custom-error', errorMessage);
-    }
-  });
+// Clear DID
+app.post("/clear-did", async (req: Request, res: Response) => {
+  const { did } = req.body;
+  try {
+    await clearDID(did);
+    res.json({ message: "DID cleared", did });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to clear DID" });
+  }
+});
 
-  socket.on('transfer-funds', async (recipient: string) => {
-    try {
-      const receipt = await transferFunds(holderDID, recipient);
-      if (!receipt) {
-        throw new Error('Failed to transfer funds');
-      }
-      socket.emit('funds-transferred', recipient);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to transfer funds';
-      console.error(
-        `[${new Date().toISOString()}] Error transferring funds:`,
-        error,
+// Transfer funds
+app.post("/transfer-funds", async (req: Request, res: Response) => {
+  const { recipient, holderDID } = req.body;
+  try {
+    const receipt = await transferFunds(holderDID, recipient);
+    if (!receipt) throw new Error("Transfer failed");
+    res.json({ message: "Funds transferred", recipient });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to transfer funds" });
+  }
+});
+
+// Request VC
+app.post("/request-vc", async (req, res) => {
+  const {
+    holderDID,
+    issuerDID,
+    schemaName,
+    requestedCredential,
+    physicallyVerifiedCredential,
+  } = req.body;
+
+  try {
+    let result;
+    if (physicallyVerifiedCredential) {
+      result = await requestVCWithPhysicalVerification(
+        holderDID,
+        issuerDID,
+        schemaName,
+        requestedCredential,
+        physicallyVerifiedCredential
       );
-      socket.emit('custom-error', {
-        title: 'Failed to transfer funds',
-        errorMessage,
-      });
+    } else {
+      result = await requestVC(
+        holderDID,
+        issuerDID,
+        schemaName,
+        requestedCredential
+      );
     }
-  });
 
-  socket.on(
-    'vc-request',
-    (
-      issuerDID: string,
-      schemaName: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      requestedCredential: { [key: string]: any },
-      physicallyVerifiedCredential?: VerifiableCredential,
-    ) => {
-      if (physicallyVerifiedCredential) {
-        requestVCWithPhysicalVerification(
-          socket,
-          holderDID,
-          issuerDID,
-          schemaName,
-          requestedCredential,
-          physicallyVerifiedCredential,
-        );
-      } else {
-        requestVC(
-          socket,
-          holderDID,
-          issuerDID,
-          schemaName,
-          requestedCredential,
-        );
-      }
-    },
-  );
-  socket.on(
-    'issue-vc',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (credentialName, credential: { [key: string]: any }) => {
-      selfIssueVC(socket, holderDID, credential, credentialName);
-    },
-  );
-
-  socket.on('verify-vc', (credential: VerifiableCredential) => {
-    verifyVC(socket, credential);
-  });
-
-  socket.on('check-revocation-status', () => {
-    checkRevocationStatus(socket, holderDID);
-  });
-
-  socket.on('retrieve-schema-names', (issuerDID: string) => {
-    getSchemaNames(socket, issuerDID);
-  });
-
-  socket.on('schema-retrieval', (issuerDID: string, schemaName: string) => {
-    getSchema(socket, issuerDID, schemaName);
-  });
-  socket.on(
-    'request-service',
-    (providerDID: string, credential: VerifiableCredential) => {
-      requestService(socket, providerDID, holderDID, credential);
-    },
-  );
-
-  socket.on('get-credentials', () => {
-    getVCs(socket, holderDID);
-  });
-
-  socket.on('remove-vc', (credentialID: string) => {
-    removeVC(socket, holderDID, credentialID);
-  });
-
-  socket.on(
-    'ownership-challenge-response',
-    (recipientDID: string, challenge: string, response: boolean) => {
-      challengeResponse(socket, holderDID, recipientDID, challenge, response);
-    },
-  );
+    if (result.success) {
+      res.status(200).json({ message: result.message });
+    } else {
+      res.status(500).json({ error: result.message });
+    }
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-app.post('/verify-ownership', (req, res) => {
-  verifyOwnership(io, req, res);
+// app.post("/receive-credential", async (req, res) => {
+//   try {
+//     console.log("Received DIDComm credential message:", req.body);
+//     // Unpack the DIDComm message
+//     const unpacked = await resolveDIDCommMessage(req.body);
+//     // Handle the credential request or presentation
+//     console.log("Unpacked DIDComm:", unpacked);
+//     res.status(200).send({ success: true });
+//   } catch (err) {
+//     console.error("Error handling DIDComm message:", err);
+//     res.status(500).send({ error: "Failed to process DIDComm message" });
+//   }
+// });
+
+// Self Issue VC
+app.post("/issue-vc", async (req: Request, res: Response) => {
+  const { holderDID, credentialName, credential } = req.body;
+  try {
+    const credentialRes = await selfIssueVC(
+      holderDID,
+      credential,
+      credentialName
+    );
+    res.json({ message: "VC issued", credential: credentialRes });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to issue VC" });
+  }
 });
 
-app.post('/receive-credential', (req, res) => {
-  receiveCredential(io, req, res);
+// Verify VC
+app.post("/verify-vc", async (req: Request, res: Response) => {
+  const { credential } = req.body;
+  try {
+    const result = await verifyVC(credential as VerifiableCredential);
+    res.json({ message: "VC verified", result });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to verify VC" });
+  }
 });
 
-app.post('/service-response', (req, res) => {
-  handleServiceResponse(io, req, res);
+// Revocation Status
+app.get(
+  "/check-revocation-status/:did",
+  async (req: Request, res: Response) => {
+    try {
+      const result = await checkRevocationStatus(req.params.did);
+      res.json({ message: "Revocation check complete", result });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ error: "Failed to check revocation status" });
+    }
+  }
+);
+
+// Retrieve Schema Names
+app.get("/schema-names/:issuerDID", async (req: Request, res: Response) => {
+  try {
+    const result = await getSchemaNames(req.params.issuerDID);
+    res.json({ message: "Schema names retrieved", result });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to get schema names" });
+  }
 });
 
-server.listen(port, () => {
+// Retrieve Schema
+app.get(
+  "/schema/:issuerDID/:schemaName",
+  async (req: Request, res: Response) => {
+    try {
+      const result = await getSchema(
+        req.params.issuerDID,
+        req.params.schemaName
+      );
+      res.json({ message: "Schema retrieved", result });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ error: "Failed to retrieve schema" });
+    }
+  }
+);
+
+// Request Service
+app.post("/request-service", async (req: Request, res: Response) => {
+  const { holderDID, providerDID, credential } = req.body;
+  try {
+    await requestService(providerDID, holderDID, credential);
+    res.json({ message: "Service requested" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to request service" });
+  }
+});
+
+// Get Credentials
+app.get("/credentials", async (_req: Request, res: Response) => {
+  try {
+    const ipfsData = await getVCs();
+    res.json({ message: "Credentials retrieved", ipfsData });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch credentials" });
+  }
+});
+
+// Remove VC
+app.post("/remove-vc", async (req: Request, res: Response) => {
+  const { holderDID, credentialID } = req.body;
+  try {
+    const credentialId = await removeVC(holderDID, credentialID);
+    res.json({ message: "VC removed", credentialId });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to remove VC" });
+  }
+});
+
+// Challenge Response
+app.post(
+  "/ownership-challenge-response",
+  async (req: Request, res: Response) => {
+    const { holderDID, recipientDID, challenge, response } = req.body;
+    try {
+      await challengeResponse(holderDID, recipientDID, challenge, response);
+      res.json({ message: "Challenge response sent" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to send challenge response" });
+    }
+  }
+);
+
+app.post("/verify-ownership", (req, res) => verifyOwnership(req, res));
+
+app.post("/receive-credential", (req, res) => receiveCredential(req, res));
+
+app.post("/service-response", (req, res) =>
+  handleServiceResponse(null, req, res)
+);
+
+server.listen(port, async () => {
   console.log(`Server running at ${port}`);
 });
 
-// closes the SQLite connection when the server shuts down
-process.on('SIGINT', () => {
-  console.log('Received SIGINT. Closing database connection...');
-  db.close(err => {
-    if (err) {
-      console.error('Error closing the database:', err.message);
-    } else {
-      console.log('Database connection closed.');
-    }
+// Graceful shutdown
+const shutdown = () => {
+  console.log("Closing database connection...");
+  db.close((err) => {
+    if (err) console.error("DB close error:", err.message);
+    else console.log("Database connection closed.");
     process.exit(0);
   });
-});
-
-process.on('SIGTERM', () => {
-  console.log('Received SIGTERM. Closing database connection...');
-  db.close(err => {
-    if (err) {
-      console.error('Error closing the database:', err.message);
-    } else {
-      console.log('Database connection closed.');
-    }
-    process.exit(0);
-  });
-});
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

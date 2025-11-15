@@ -2,9 +2,9 @@ import {
   IDIDCommMessage,
   IPackedDIDCommMessage,
   IUnpackedDIDCommMessage,
-} from '@veramo/did-comm';
-import { agent } from './server/server.js';
-import { getIdentifierKeys, resolveDIDDocument } from './utils.js';
+} from "@veramo/did-comm";
+import { agent } from "./server/server.js";
+import { getIdentifierKeys, resolveDIDDocument } from "./utils.js";
 
 /**
  * Send a DIDComm message using optional encryption.
@@ -19,22 +19,27 @@ export async function sendDIDCommMessage(
   recipientDID: string,
   message: Record<string, unknown>,
   serviceType: string,
-  encryption: 'authcrypt' | 'anoncrypt' | 'none',
+  encryption: "authcrypt" | "anoncrypt" | "none"
 ): Promise<void> {
   const didDoc = await resolveDIDDocument(recipientDID);
-  const serviceEndpoint = didDoc?.service?.find(
-    service => service.type === serviceType,
-  )?.serviceEndpoint;
+  // const serviceEndpoint = didDoc?.service?.find(
+  //   service => service.type === serviceType,
+  // )?.serviceEndpoint;
 
-  if (!serviceEndpoint || typeof serviceEndpoint !== 'string') {
+  const serviceEndpoint =
+    didDoc?.service?.find((s) => s.type === serviceType)?.serviceEndpoint ??
+    didDoc?.service?.find((s) => s.type === "DIDCommMessaging")
+      ?.serviceEndpoint;
+
+  if (!serviceEndpoint || typeof serviceEndpoint !== "string") {
     throw new Error(
-      `Service endpoint is invalid or undefined for ${serviceType}`,
+      `Service endpoint is invalid or undefined for ${serviceType}`
     );
   }
 
   const didCommMessage: IDIDCommMessage = {
     id: `urn:uuid:${crypto.randomUUID()}`,
-    type: 'https://didcomm.org/basicmessage/2.0/message',
+    type: "https://didcomm.org/basicmessage/2.0/message",
     to: [recipientDID],
     from: senderDID,
     body: message,
@@ -42,19 +47,19 @@ export async function sendDIDCommMessage(
 
   let packedMessage: IPackedDIDCommMessage;
 
-  if (encryption === 'none') {
+  if (encryption === "none") {
     packedMessage = await agent.packDIDCommMessage({
-      packing: 'none',
+      packing: "none",
       message: didCommMessage,
     });
   } else {
     const sender = await agent.didManagerGet({ did: senderDID });
-    if (!sender) throw new Error('Sender DID must be managed by the agent');
+    if (!sender) throw new Error("Sender DID must be managed by the agent");
 
     const key = (await getIdentifierKeys(senderDID)).find(
-      k => k.type === 'X25519',
+      (k) => k.type === "X25519"
     );
-    if (!key) throw new Error('X25519 encryption key not found for sender');
+    if (!key) throw new Error("X25519 encryption key not found for sender");
 
     packedMessage = await agent.packDIDCommMessage({
       packing: encryption,
@@ -65,18 +70,18 @@ export async function sendDIDCommMessage(
 
   try {
     const response = await fetch(serviceEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(packedMessage),
     });
 
     if (!response.ok) {
       const errorMessage = response.body
-        ? await response.json().then(err => err.error || JSON.stringify(err))
+        ? await response.json().then((err) => err.error || JSON.stringify(err))
         : response.statusText;
 
       throw new Error(
-        `Message failed to send: ${response.status} - ${errorMessage}`,
+        `Message failed to send: ${response.status} - ${errorMessage}`
       );
     }
   } catch (err) {
@@ -94,7 +99,7 @@ export async function resolveDIDCommMessage(packedMessage: {
     const unpackedMessage = await agent.unpackDIDCommMessage(packedMessage);
     return unpackedMessage;
   } catch (error) {
-    console.error('Failed to unpack DIDComm message:', error);
+    console.error("Failed to unpack DIDComm message:", error);
     throw error;
   }
 }

@@ -1,6 +1,6 @@
 services:
-  holder-backend:
-    container_name: holder-backend
+  holder-agent:
+    container_name: holder-agent
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -10,6 +10,8 @@ services:
       - ./backend/.env
     volumes:
       - ./backend/data:/app/data
+    networks:
+      - my_shared_network
     restart: unless-stopped
 
   holder-frontend:
@@ -20,5 +22,11 @@ services:
     ports:
       - "5173:80"
     depends_on:
-      - holder-backend
+      - holder-agent
+    networks:
+      - my_shared_network
     restart: unless-stopped
+  
+networks:
+  my_shared_network:
+    external: true

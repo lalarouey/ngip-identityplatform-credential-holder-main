@@ -1,15 +1,18 @@
-import 'dotenv/config';
-import { GetCIDResponse, PinataSDK, UploadResponse } from 'pinata';
-import { PINATA_JWT, PINATA_GATEWAY_URL } from '../config.js';
+import "dotenv/config";
+import { GetCIDResponse, PinataSDK, UploadResponse } from "pinata";
+import { PINATA_JWT, PINATA_GATEWAY_URL } from "../config.js";
+
+console.log(PINATA_JWT);
+console.log(PINATA_GATEWAY_URL);
 
 const pinata = new PinataSDK({
-  pinataJwt: PINATA_JWT || 'Pinata JWT',
-  pinataGateway: PINATA_GATEWAY_URL || 'Pinata Gateway Address',
+  pinataJwt: PINATA_JWT || "Pinata JWT",
+  pinataGateway: PINATA_GATEWAY_URL || "Pinata Gateway Address",
 });
 
 async function uploadPrivateJSONObject(object: any): Promise<UploadResponse> {
   try {
-    const fileName = object.id ? `${object.id}.json` : 'data.json';
+    const fileName = object.id ? `${object.id}.json` : "data.json";
     const data = await pinata.upload.json(object, {
       metadata: {
         name: fileName,
@@ -24,9 +27,12 @@ async function uploadPrivateJSONObject(object: any): Promise<UploadResponse> {
 
 async function getPrivateJSONObject(cid: string): Promise<GetCIDResponse> {
   try {
+    console.log("CID: ", cid);
+    console.log(pinata.config?.pinataJwt, pinata.config?.pinataGateway);
     const file = await pinata.gateways.get(cid);
+    console.log("Pinata file: ", file);
     if (!file) {
-      throw new Error('Failed to get JSON object from IPFS');
+      throw new Error("Failed to get JSON object from IPFS");
     }
     return file;
   } catch (error) {

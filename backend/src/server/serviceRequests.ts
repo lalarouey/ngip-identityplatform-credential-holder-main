@@ -1,8 +1,8 @@
-import { VerifiableCredential } from '@veramo/core';
-import { Request, Response } from 'express';
-import { Server, Socket } from 'socket.io';
-import { resolveDIDCommMessage, sendDIDCommMessage } from '../didcomm.js';
-import { title } from 'process';
+import { VerifiableCredential } from "@veramo/core";
+import { Request, Response } from "express";
+import { Server, Socket } from "socket.io";
+import { resolveDIDCommMessage, sendDIDCommMessage } from "../didcomm.js";
+import { title } from "process";
 
 /**
  * Requests a service from a service provider and sends the response to the client
@@ -14,42 +14,35 @@ import { title } from 'process';
  * requestService(socket, data);
  */
 export async function requestService(
-  socket: Socket,
   providerDID: string,
   holderDID: string,
-  credential: VerifiableCredential,
+  credential: VerifiableCredential
 ): Promise<void> {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] Requesting service...`);
 
   try {
-    if (!socket) {
-      throw new Error('Socket not connected');
-    }
     validateServiceRequest(providerDID, credential);
 
     await sendDIDCommMessage(
       holderDID,
       providerDID,
       { credential },
-      'requestService',
-      'authcrypt',
+      "requestService",
+      "authcrypt"
     );
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : 'An unknown error occurred';
+      error instanceof Error ? error.message : "An unknown error occurred";
     console.error(`[${timestamp}] Error requesting service:`, error);
-    socket.emit('custom-error', {
-      title: 'Service request error',
-      errorMessage,
-    });
+    throw new Error(errorMessage);
   }
 }
 
 export async function handleServiceResponse(
-  io: Server,
+  io: Server | null,
   req: Request,
-  res: Response,
+  res: Response
 ): Promise<void> {
   const timestamp = new Date().toISOString();
   try {
@@ -62,29 +55,35 @@ export async function handleServiceResponse(
     res.sendStatus(200);
     console.log(
       `[${timestamp}] Service response received:`,
-      responseData.approved,
+      responseData.approved
     );
-    io.emit('service-response', responseData);
+
+    if (io) {
+      io.emit("service-response", responseData);
+    }
   } catch (error) {
-    res.status(500).send({ error: 'An error occured handling the message' });
-    console.error('Error processing service response:', error);
-    io.emit('custom-error', {
-      title: 'Service response error',
-      errorMessage: 'Failed to process service response',
-    });
+    res.status(500).send({ error: "An error occurred handling the message" });
+    console.error("Error processing service response:", error);
+
+    if (io) {
+      io.emit("custom-error", {
+        title: "Service response error",
+        errorMessage: "Failed to process service response",
+      });
+    }
   }
 }
 
 function validateServiceRequest(
   did: string,
-  credential: VerifiableCredential,
+  credential: VerifiableCredential
 ): void {
-  if (!did || typeof did !== 'string') {
-    throw new Error('Invalid data: DID is missing or not a string');
+  if (!did || typeof did !== "string") {
+    throw new Error("Invalid data: DID is missing or not a string");
   }
 
-  if (!credential || typeof credential !== 'object') {
+  if (!credential || typeof credential !== "object") {
     // TODO: Check if this is a valid VerifiableCredential
-    throw new Error('Invalid data: Credential is missing or not an object');
+    throw new Error("Invalid data: Credential is missing or not an object");
   }
 }

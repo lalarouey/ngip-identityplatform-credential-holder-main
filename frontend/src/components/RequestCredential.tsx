@@ -245,7 +245,7 @@ interface IRequestCredential {
   schemaNames: string[] | null;
   schema: TSchema | null;
   resetSchema: () => void;
-  socket: Socket;
+  // socket: Socket;
   credentials: VerifiableCredential[] | null;
 }
 
@@ -253,7 +253,7 @@ export default function RequestCredential({
   schemaNames,
   schema,
   resetSchema,
-  socket,
+  // socket,
   credentials,
 }: IRequestCredential) {
   const [schemaName, setSchemaName] = useState<string>('');
@@ -274,7 +274,7 @@ export default function RequestCredential({
       <SelectIssuer
         setIssuerDID={setIssuerDID}
         issuerDID={issuerDID}
-        socket={socket}
+        // socket={socket}
         disabled={!!schemaNames} // Disable if schemaNames are available
       />
 
@@ -282,7 +282,7 @@ export default function RequestCredential({
         <SelectSchema
           issuerDID={issuerDID}
           schemaNames={schemaNames}
-          socket={socket}
+          // socket={socket}
           schemaName={schemaName}
           setSchemaName={setSchemaName}
           disabled={!!schema} // Disable if schema is available
@@ -291,7 +291,7 @@ export default function RequestCredential({
 
       {schema && (
         <RequestForm
-          socket={socket}
+          // socket={socket}
           issuerDID={issuerDID}
           schema={schema}
           credentials={credentials}

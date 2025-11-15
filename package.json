@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@veramo/core": "^6.0.0",
+    "@veramo/data-store": "^6.0.0",
+    "@veramo/did-manager": "^6.0.0",
+    "@veramo/key-manager": "^6.0.0",
+    "@veramo/kms-local": "^6.0.0"
+  }
+}

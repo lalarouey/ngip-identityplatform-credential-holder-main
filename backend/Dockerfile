@@ -2,10 +2,13 @@
   FROM node:20.17-bullseye-slim AS builder
 
   WORKDIR /app
+
+  RUN apt-get update && apt-get install -y git python3 make g++ && rm -rf /var/lib/apt/lists/*
   
   COPY package.json yarn.lock ./
   
-  RUN yarn install --frozen-lockfile
+  # RUN yarn install --frozen-lockfile
+  RUN yarn cache clean && yarn install --frozen-lockfile --ignore-scripts --ignore-engines
   
   COPY . .
   
@@ -16,6 +19,8 @@
   FROM node:20.17-bullseye-slim AS runner
   
   WORKDIR /app
+  
+  RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
   
   # Copy only what is needed
   COPY --from=builder /app/package.json ./

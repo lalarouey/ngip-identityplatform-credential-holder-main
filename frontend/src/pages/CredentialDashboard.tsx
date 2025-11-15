@@ -7,13 +7,13 @@ import { Socket } from 'socket.io-client';
 import { TRegistryVC } from 'types';
 
 interface CredentialDashboardProps {
-  socket: Socket;
+  // socket: Socket;
   vcList: VerifiableCredential[];
   registryList: TRegistryVC[];
 }
 
 export function CredentialDashboard({
-  socket,
+  // socket,
   vcList,
   registryList,
 }: CredentialDashboardProps) {
