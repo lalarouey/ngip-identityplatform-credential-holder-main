@@ -1,117 +1,144 @@
-import { Button, Card, Divider, Flex, Stack, Text, Title } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { VerifiableCredential } from '@veramo/core';
-import { useEffect, useState } from 'react';
-import { Socket } from 'socket.io-client';
-import { TRegistryVC } from 'types';
+import { Button, Card, Divider, Flex, Stack, Text, Title } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { VerifiableCredential } from "@veramo/core";
+import { useEffect, useState } from "react";
+import { TRegistryVC } from "types";
 
 interface ICredentialsProps {
-  socket: Socket;
   vcList: VerifiableCredential[];
   registryList: TRegistryVC[];
 }
 
 interface ICredentialProps {
-  socket: Socket;
   vc?: VerifiableCredential;
   isRevoked?: boolean;
+  refresh: () => void;
 }
 
-const Credential = ({ socket, vc, isRevoked = false }: ICredentialProps) => {
+const API_URL = "http://localhost:3002";
+
+const Credential = ({ vc, isRevoked, refresh }: ICredentialProps) => {
   const [verificationStatus, setVerificationStatus] = useState<string | null>(
-    null,
+    null
   );
 
   if (!vc || !vc.credentialSubject) {
-    console.error('Invalid VC', vc);
+    console.error("Invalid VC", vc);
     return null;
   }
 
-  const deleteVC = (id: string) => {
-    if (!socket.connected) {
-      console.error('Socket not connected');
-      return;
-    }
-    socket.emit('remove-vc', id);
-    console.log('VC delete request sent');
-  };
-
-  const verifyVC = () => {
-    if (!socket.connected) {
-      notifications.show({ message: 'Socket not connected', color: 'red' });
-      return;
-    }
-    socket.emit('verify-vc', vc);
-    notifications.show({ message: 'Verification requested...', color: 'blue' });
-  };
-
-  useEffect(() => {
-    const handler = (data: { id: string; verified: boolean }) => {
-      if (data.id !== vc.id) return;
-      setVerificationStatus(data.verified ? 'Verified' : 'Not Verified');
-      notifications.show({
-        title: 'Verification Status',
-        message: data.verified ? 'Verified' : 'Not Verified',
-        color: data.verified ? 'green' : 'red',
+  const deleteVC = async (id: string) => {
+    try {
+      const res = await fetch(`${API_URL}/remove-vc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          holderDID: vc.credentialSubject.id,
+          credentialID: id,
+        }),
       });
-    };
 
-    socket.on('vc-verified', handler);
-    return () => {
-      socket.off('vc-verified', handler);
-    };
-  }, [socket, vc.id]);
+      if (!res.ok) throw new Error("Delete failed");
+
+      notifications.show({ color: "green", message: "VC removed" });
+      refresh();
+    } catch (err) {
+      console.error(err);
+      notifications.show({ color: "red", message: "Failed to delete VC" });
+    }
+  };
+
+  const verifyVC = async () => {
+    try {
+      const res = await fetch(`${API_URL}/verify-vc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: vc }),
+      });
+
+      const data = await res.json();
+      const verified = data.result?.verified;
+
+      setVerificationStatus(verified ? "Verified" : "Not Verified");
+
+      notifications.show({
+        title: "VC Verification",
+        message: verified ? "VC is valid" : "VC is NOT valid",
+        color: verified ? "green" : "red",
+      });
+    } catch (err) {
+      console.error(err);
+      notifications.show({ color: "red", message: "Verification error" });
+    }
+  };
+
+  // useEffect(() => {
+  //   const handler = (data: { id: string; verified: boolean }) => {
+  //     if (data.id !== vc.id) return;
+  //     setVerificationStatus(data.verified ? "Verified" : "Not Verified");
+  //     notifications.show({
+  //       title: "Verification Status",
+  //       message: data.verified ? "Verified" : "Not Verified",
+  //       color: data.verified ? "green" : "red",
+  //     });
+  //   };
+
+  //   socket.on("vc-verified", handler);
+  //   return () => {
+  //     socket.off("vc-verified", handler);
+  //   };
+  // }, [socket, vc.id]);
 
   return (
     <Card
-      shadow='md'
-      padding='xl'
-      radius='md'
+      shadow="md"
+      padding="xl"
+      radius="md"
       withBorder
       style={{
-        backgroundColor: '#f8f9fa',
-        borderRadius: '12px',
-        padding: '20px',
+        backgroundColor: "#f8f9fa",
+        borderRadius: "12px",
+        padding: "20px",
       }}
     >
-      <Stack align='start'>
-        <Title order={3} ta='left' c='black'>
-          {vc.type?.[1]?.replace(/([A-Z])/g, ' $1').trim() ?? 'Unknown Type'}
+      <Stack align="start">
+        <Title order={3} ta="left" c="black">
+          {vc.type?.[1]?.replace(/([A-Z])/g, " $1").trim() ?? "Unknown Type"}
         </Title>
-        <Text ta='left' c='black'>
+        <Text ta="left" c="black">
           <strong>ID:</strong> {vc.id}
         </Text>
-        <Text ta='left' c='black'>
+        <Text ta="left" c="black">
           <strong>Issuance Date:</strong> {formatDate(vc.issuanceDate)}
         </Text>
-        <Text ta='left' c='black'>
-          <strong>Expiration Date:</strong>{' '}
-          {formatDate(vc.expirationDate || '')}
+        <Text ta="left" c="black">
+          <strong>Expiration Date:</strong>{" "}
+          {formatDate(vc.expirationDate || "")}
         </Text>
-        <Text ta='left' c='black'>
+        <Text ta="left" c="black">
           <strong>Issuer DID:</strong> {(vc.issuer as { id: string }).id}
         </Text>
-        <Text ta='left' c={isRevoked ? 'red' : 'green'}>
-          <strong>Revoked:</strong> {isRevoked ? 'Yes' : 'No'}
+        <Text ta="left" c={isRevoked ? "red" : "green"}>
+          <strong>Revoked:</strong> {isRevoked ? "Yes" : "No"}
         </Text>
-        <Divider my='sm' />
+        <Divider my="sm" />
         {Object.entries(vc.credentialSubject).map(([key, value]) => (
-          <Text key={key} ta='left' c='black'>
-            <strong>{key.charAt(0).toUpperCase() + key.slice(1)}:</strong>{' '}
+          <Text key={key} ta="left" c="black">
+            <strong>{key.charAt(0).toUpperCase() + key.slice(1)}:</strong>{" "}
             {value}
           </Text>
         ))}
 
         {verificationStatus && (
-          <Text size='sm' mt='xs'>
+          <Text size="sm" mt="xs">
             <strong>Status:</strong> {verificationStatus}
           </Text>
         )}
-        <Flex justify='space-between' style={{ width: '100%' }}>
-          <Button color='blue' onClick={verifyVC}>
+        <Flex justify="space-between" style={{ width: "100%" }}>
+          <Button color="blue" onClick={verifyVC}>
             Verify
           </Button>
-          <Button color='red' onClick={() => vc.id && deleteVC(vc.id)}>
+          <Button color="red" onClick={() => vc.id && deleteVC(vc.id)}>
             Delete
           </Button>
         </Flex>
@@ -123,67 +150,82 @@ const Credential = ({ socket, vc, isRevoked = false }: ICredentialProps) => {
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
-const Credentials = ({ socket, vcList, registryList }: ICredentialsProps) => {
+const Credentials = ({ vcList, registryList }: ICredentialsProps) => {
+  const [credentials, setCredentials] = useState(vcList);
+
+  const refresh = async () => {
+    try {
+      const res = await fetch(`${API_URL}/credentials`);
+      const data = await res.json();
+      setCredentials(data.ipfsData || []);
+      notifications.show({ message: "Refreshed", color: "green" });
+    } catch (err) {
+      console.error(err);
+      notifications.show({ message: "Refresh failed", color: "red" });
+    }
+  };
+
   const isRevoked = (vcID: string): boolean => {
-    const match = registryList.find(r => r.vcID === vcID);
+    const match = registryList.find((r) => r.vcID === vcID);
     if (!match) return true;
     return match.revoked || match.ttl * 1000 < Date.now();
   };
 
-  const handleRequest = async (event?: React.MouseEvent<HTMLButtonElement>) => {
-    event?.preventDefault();
+  // const handleRequest = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+  //   event?.preventDefault();
 
-    if (!socket.connected) {
-      console.error('Socket not connected');
-      return;
-    }
+  //   if (!socket.connected) {
+  //     console.error("Socket not connected");
+  //     return;
+  //   }
 
-    socket.emit('get-credentials');
-    socket.emit('check-revocation-status');
-  };
+  //   socket.emit("get-credentials");
+  //   socket.emit("check-revocation-status");
+  // };
 
   return (
     <div
       style={{
-        padding: '20px',
-        width: '100%',
-        alignItems: 'center',
+        padding: "20px",
+        width: "100%",
+        alignItems: "center",
         margin: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '20px',
-        overflowY: 'auto',
+        display: "flex",
+        flexDirection: "column",
+        gap: "20px",
+        overflowY: "auto",
         flexGrow: 1, // Take up remaining space in the parent container
-        height: '80vh', // Full height of the viewport
-        boxSizing: 'border-box', // Ensure padding is included in the height calculation
+        height: "80vh", // Full height of the viewport
+        boxSizing: "border-box", // Ensure padding is included in the height calculation
       }}
     >
       <div>
-        <Button color='gray' onClick={handleRequest}>
+        <Button color="gray" onClick={refresh}>
           Refresh
         </Button>
       </div>
       <div
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
+          marginTop: "20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "20px",
         }}
       >
-        {vcList.map((vc, count) => (
+        {credentials.map((vc, i) => (
           <Credential
-            socket={socket}
-            key={count}
+            key={i}
             vc={vc}
-            isRevoked={isRevoked(vc.id ?? '')}
+            isRevoked={isRevoked(vc.id!)}
+            refresh={refresh}
           />
         ))}
       </div>

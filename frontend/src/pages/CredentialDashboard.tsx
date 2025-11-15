@@ -1,48 +1,38 @@
-import { VerifiableCredential } from '@veramo/core';
-import CreateCredential from 'components/CreateCredential';
-import Credentials from 'components/Credentials';
-import Topbar from 'components/Topbar';
-import { useState } from 'react';
-import { Socket } from 'socket.io-client';
-import { TRegistryVC } from 'types';
+import { VerifiableCredential } from "@veramo/core";
+import CreateCredential from "components/CreateCredential";
+import Credentials from "components/Credentials";
+import Topbar from "components/Topbar";
+import { useState } from "react";
+import { TRegistryVC } from "types";
 
 interface CredentialDashboardProps {
-  // socket: Socket;
   vcList: VerifiableCredential[];
   registryList: TRegistryVC[];
+  dids: string[];
 }
 
 export function CredentialDashboard({
-  // socket,
   vcList,
   registryList,
+  dids
 }: CredentialDashboardProps) {
-  const [activeSubTab, setActiveSubTab] = useState('credentials');
+  const [activeSubTab, setActiveSubTab] = useState("credentials");
 
   const renderComponent = () => {
-    if (!socket.connected) {
-      return;
-    }
     switch (activeSubTab) {
-      case 'credentials':
-        return (
-          <Credentials
-            socket={socket}
-            vcList={vcList}
-            registryList={registryList}
-          />
-        );
-      case 'createCredential':
-        return <CreateCredential socket={socket} />;
+      case "credentials":
+        return <Credentials vcList={vcList} registryList={registryList} />;
+      case "createCredential":
+        return <CreateCredential dids={dids}/>;
       default:
-        'credentialRequests';
+        "credentialRequests";
     }
   };
 
   return (
     <div>
       <Topbar
-        subTabs={['credentials', 'createCredential']}
+        subTabs={["credentials", "createCredential"]}
         activeSubTab={activeSubTab}
         setActiveSubTab={setActiveSubTab}
       />

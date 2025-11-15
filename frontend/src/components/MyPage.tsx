@@ -32,13 +32,12 @@ export default function MyPage({ ethAddress, dids, balance }: IMyPageProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ did }),
       });
-
-      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
 
       notifications.show({
-        title: "Success",
-        message: `DID Initialized: ${did}`,
-        color: "green",
+        title: "DID Initialized",
+        message: data.message,
+        color: "blue",
       });
     } catch (err) {
       notifications.show({
@@ -62,11 +61,10 @@ export default function MyPage({ ethAddress, dids, balance }: IMyPageProps) {
         body: JSON.stringify({ did }),
       });
 
-      if (!res.ok) throw new Error("Failed");
-
+      const data = await res.json();
       notifications.show({
-        title: "Success",
-        message: `DID Cleared: ${did}`,
+        title: "Funds Transferred",
+        message: data.message,
         color: "green",
       });
     } catch (err) {

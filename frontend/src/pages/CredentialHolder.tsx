@@ -37,121 +37,6 @@ export default function CredentialHolder() {
   }
 
   const connect = useCallback(async () => {
-    // const newSocket = io("http://localhost:3002");
-
-    // newSocket.on("connect", () => {
-    //   setConnected(true);
-    // });
-
-    // newSocket.on("vc-received", (VC: VerifiableCredential) => {
-    //   setVcList((prev) => [...prev, VC]);
-    //   notifications.show({
-    //     message: "Credential Received",
-    //     color: "green",
-    //   });
-    // });
-
-    // newSocket.on(
-    //   "custom-error",
-    //   (error: { title: string; errorMessage: string }) => {
-    //     console.error("Error:", error);
-    //     notifications.show({
-    //       title: error.title,
-    //       message: error.errorMessage,
-    //       color: "red",
-    //     });
-    //   }
-    // );
-
-    // newSocket.on("credentials-received", (data: VerifiableCredential[]) => {
-    //   setVcList(data);
-    //   notifications.show({
-    //     message: "Credentials have been successfully received",
-    //     color: "green",
-    //   });
-    // });
-
-    // newSocket.on("vcs-received", (data: TRegistryVC[]) => {
-    //   setRegistryList(data);
-    //   notifications.show({
-    //     message: "Credentials have been successfully received from registry",
-    //     color: "green",
-    //   });
-    // });
-
-    // newSocket.on(
-    //   "service-response",
-    //   (responseData: { approved: boolean; token: string }) => {
-    //     if (responseData.approved) {
-    //       notifications.show({
-    //         message: "Service request succeeded",
-    //         color: "green",
-    //       });
-    //       console.log("Service token: ", responseData.token); // implement what to do with token later
-    //     } else {
-    //       notifications.show({
-    //         message: "Service request rejected",
-    //         color: "red",
-    //       });
-    //     }
-    //   }
-    // );
-
-    // newSocket.on("schema-names-retrieval", (schemaNames: string[] | null) => {
-    //   setSchemaNames(schemaNames);
-    // });
-
-    // newSocket.on("schema-retrieval", (data) => {
-    //   setSchema(data);
-    // });
-
-    // newSocket.on(
-    //   "identifier-info",
-    //   (holderDIDs: string[], ethAddress: string, balance: number) => {
-    //     setDids(holderDIDs);
-    //     setEthAddress(ethAddress);
-    //     setBalance(balance);
-    //   }
-    // );
-
-    // newSocket.on("did-initialized", () => {
-    //   notifications.show({
-    //     message: "DID has been initialized",
-    //     color: "green",
-    //   });
-    // });
-
-    // newSocket.on("did-cleared", () => {
-    //   notifications.show({
-    //     message: "DID has been cleared",
-    //     color: "red",
-    //   });
-    // });
-
-    // newSocket.on("funds-transferred", (recipient: string) => {
-    //   notifications.show({
-    //     message: `Funds have been transferred to ${recipient}`,
-    //     color: "green",
-    //   });
-    // });
-
-    // newSocket.on(
-    //   "ownership-challenge",
-    //   (senderDID: string, challenge: string) => {
-    //     notifications.show({
-    //       title: "Ownership Challenge",
-    //       message: `Challenge from ${senderDID}`,
-    //       color: "blue",
-    //     });
-    //     setChallengeList((prevChallenges) => [
-    //       ...prevChallenges,
-    //       { did: senderDID, challenge },
-    //     ]);
-    //   }
-    // );
-
-    // setSocket(newSocket);
-    // setActiveTab("credentials");
     try {
       const res = await fetch("http://localhost:3002/identifiers");
       const data = await res.json();
@@ -196,7 +81,7 @@ export default function CredentialHolder() {
     switch (activeTab) {
       case "credentials":
         return (
-          <CredentialDashboard vcList={vcList} registryList={registryList} />
+          <CredentialDashboard vcList={vcList} registryList={registryList}  dids={dids}/>
         );
       case "requestCredential":
         return (
