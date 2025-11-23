@@ -1,4 +1,4 @@
-import { VerifiableCredential } from "@veramo/core";
+import { IKey, VerifiableCredential } from "@veramo/core";
 import { Request, Response } from "express";
 import { Server, Socket } from "socket.io";
 import { TCidRow, TEncryptedVC } from "types.js";
@@ -19,6 +19,7 @@ import { execute, fetchAll, fetchFirst } from "../ipfsRegister.js";
 import {
   getEncryptedKeyFromDID,
   getEncryptedKeyFromDID2,
+  getIdentifierKeys,
   initializeDID,
 } from "../utils.js";
 import { agent, db } from "./server.js";
@@ -342,7 +343,7 @@ async function uploadVC(credential: VerifiableCredential) {
     console.log("Subject ID: ", subjectId);
     let encrypted: any;
     if (subjectId.startsWith("did:")) {
-      const encKey = await getEncryptedKeyFromDID2(subjectId);
+      const encKey = await getEncryptedKeyFromDID(subjectId);
       if (!encKey) {
         throw new Error("X25519 encryption key not found for DID");
       }
@@ -423,6 +424,7 @@ async function validateDID(did: string) {
 
   return did;
 }
+
 /**
  * Function to map and get credentials from IPFS
  * @returns a promise that resolves to an array of verifiable credentials
@@ -455,27 +457,40 @@ async function mapAndGetCredentials() {
     })
     .then((identifier) => identifier.did);
   // await validateDID(DID);
-  await initializeDID(DID);
+  // await initializeDID(DID);
 
-  const encKey = await getEncryptedKeyFromDID(DID);
+  // Get all X25519 keys for the holder to try decrypting with
+  const allKeys = await getIdentifierKeys(DID);
+  const x25519Keys = allKeys.filter((k) => k.type === "X25519");
+  if (x25519Keys.length === 0) {
+    throw new Error("No X25519 encryption keys found for holder DID");
+  }
+  console.log(`Found ${x25519Keys.length} X25519 key(s) for decryption`);
 
   const credentials = await Promise.all(
     IPFSData.map(async (data) => {
       const { id, encryptedCredential } = data;
       if (!id || !encryptedCredential) return null;
 
-      try {
-        const parsed = JSON.parse(encryptedCredential);
-        const decrypted = await agent.keyManagerDecryptJWE({
-          kid: encKey.kid,
-          data: parsed,
-        });
+      // Try decrypting with each available X25519 key
+      for (const encKey of x25519Keys) {
+        try {
+          const parsed = JSON.parse(encryptedCredential);
+          const decrypted = await agent.keyManagerDecryptJWE({
+            kid: encKey.kid,
+            data: parsed,
+          });
 
-        return JSON.parse(decrypted);
-      } catch (error) {
-        console.error(`Failed to decrypt credential for ID ${id}`, error);
-        return null;
+          return JSON.parse(decrypted);
+        } catch (error) {
+          // If this key fails, try the next one
+          continue;
+        }
       }
+      
+      // If all keys failed, log the error
+      console.error(`Failed to decrypt credential for ID ${id} with any available key`);
+      return null;
     })
   );
   return credentials.filter(Boolean) as VerifiableCredential[];

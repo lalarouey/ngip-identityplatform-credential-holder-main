@@ -62,7 +62,7 @@ export default function Sidebar({
           width: '100%',
         }}
       >
-        {/* <Button
+        <Button
           style={{
             backgroundColor: connected ? 'red' : 'white',
             color: connected ? '#ffffff' : 'black',
@@ -73,8 +73,8 @@ export default function Sidebar({
           }}
           onClick={connected ? disconnectSocket : connectSocket}
         >
-          {connected ? 'Disconnect Socket' : 'Connect Socket'} */}
-        {/* </Button> */}
+          {connected ? 'Disconnect Socket' : 'Connect Socket'}
+        </Button> 
         <Indicator color={connected ? 'green' : 'red'} />
       </Container>
       <Container

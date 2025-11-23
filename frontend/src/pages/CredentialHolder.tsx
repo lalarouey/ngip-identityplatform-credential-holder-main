@@ -6,6 +6,7 @@ import RequestCredential from "components/RequestCredential";
 import { RequestService } from "components/RequestService";
 import Sidebar from "components/Sidebar";
 import { useCallback, useEffect, useState } from "react";
+import { io, Socket } from "socket.io-client";
 import { TRegistryVC, TSchema } from "types";
 import { CredentialDashboard } from "./CredentialDashboard";
 
@@ -25,11 +26,13 @@ export default function CredentialHolder() {
   const [schemaNames, setSchemaNames] = useState<string[] | null>(null);
   const [schema, setSchema] = useState<TSchema | null>(null);
   const [challenges, setChallengeList] = useState<
-    { did: string; challenge: string }[]
+    { from: string; challenge: string }[]
   >([]);
   const [dids, setDids] = useState<string[]>([]);
+  const [holderDID, setHolderDID] = useState<string | null>(null);
   const [ethAddress, setEthAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   function resetSchema() {
     setSchemaNames(null);
@@ -42,9 +45,44 @@ export default function CredentialHolder() {
       const data = await res.json();
 
       setDids(data.holderDIDs);
+      setHolderDID(data.holderDIDs[0] || null); // Use first DID as default
       setEthAddress(data.ethAddress);
       setBalance(data.balance);
 
+      // Set up Socket.IO connection
+      const newSocket = io("http://localhost:3002");
+      
+      newSocket.on("connect", () => {
+        console.log("Socket connected");
+        // Register the holder DID with the socket
+        if (data.holderDIDs && data.holderDIDs.length > 0) {
+          newSocket.emit("register-did", data.holderDIDs[0]);
+        }
+      });
+
+      // Listen for ownership challenges
+      newSocket.on("ownership-challenge", (data: { from: string; challenge: string }) => {
+        console.log("Received ownership challenge:", data);
+        notifications.show({
+          title: "New Ownership Challenge",
+          message: `Challenge received from ${data.from}`,
+          color: "blue",
+        });
+        setChallengeList((prev) => {
+          // Check if challenge already exists
+          const exists = prev.some(
+            (c) => c.from === data.from && c.challenge === data.challenge
+          );
+          if (exists) return prev;
+          return [...prev, { from: data.from, challenge: data.challenge }];
+        });
+      });
+
+      newSocket.on("disconnect", () => {
+        console.log("Socket disconnected");
+      });
+
+      setSocket(newSocket);
       setConnected(true);
       setActiveTab("credentials");
 
@@ -68,13 +106,17 @@ export default function CredentialHolder() {
   }, []);
 
   const disconnect = useCallback(() => {
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
     setConnected(false);
     setActiveTab(null);
     notifications.show({
       message: "Disconnected",
       color: "red",
     });
-  }, []);
+  }, [socket]);
 
   function renderComponent() {
     if (!connected) return null;
@@ -97,6 +139,7 @@ export default function CredentialHolder() {
           <Challenge
             challengeList={challenges}
             setChallengeList={setChallengeList}
+            holderDID={holderDID}
           />
         );
       case "requestService":

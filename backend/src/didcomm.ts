@@ -96,6 +96,7 @@ export async function resolveDIDCommMessage(packedMessage: {
   message: string;
 }): Promise<IUnpackedDIDCommMessage> {
   try {
+    console.log("Packed Message:", packedMessage);
     const unpackedMessage = await agent.unpackDIDCommMessage(packedMessage);
     return unpackedMessage;
   } catch (error) {

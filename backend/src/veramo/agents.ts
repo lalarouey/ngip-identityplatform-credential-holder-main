@@ -149,20 +149,6 @@ export async function getAgent({
         store: new DIDStore(dbConnection),
         defaultProvider: Object.keys(providers)[0] ?? "did:ethr:sepolia",
         providers,
-        // providers: {
-        //   "did:ethr:sepolia": new EthrDIDProvider({
-        //     defaultKms: "local",
-        //     networks: [
-        //       {
-        //         name: "sepolia",
-        //         provider: ethSepoliaProvider,
-        //         chainId: 11155111,
-        //         registry: "0x03d5003bf0e79C5F5223588F347ebA39AfbC3818",
-        //       },
-        //     ],
-        //     registry: "0x03d5003bf0e79C5F5223588F347ebA39AfbC3818",
-        //   }),
-        // },
       }),
       new DIDResolverPlugin({
         resolver: sharedDidResolver,

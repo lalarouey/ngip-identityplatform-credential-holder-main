@@ -76,6 +76,7 @@ const ethIdentifier = await agent.didManagerGetOrCreate({
   alias: "default",
   provider: "did:ethr:sepolia",
 });
+console.log("Holder Ethr DID document: ", ethIdentifier);
 const webIdentifier = await agent.didManagerGetOrCreate({
   alias: "example.com",
   provider: "did:web",
@@ -84,50 +85,36 @@ const webIdentifier = await agent.didManagerGetOrCreate({
 const holderDIDs = [ethIdentifier.did, webIdentifier.did];
 const ethAddress = await getEthAddress(ethIdentifier.did);
 
-export const didToSocketMap = new Map<string, any>();
+export const didToSocketMap = new Map<string, { socket: any; challenge?: string; from?: string }>();
 
-// const socket = io("http://localhost:3002");
+// Socket.IO event handlers
+io.on("connection", (socket) => {
+  console.log("New socket connection:", socket.id);
 
-// socket.on("connect", () => {
-//   console.log("Connected as:", socket.id);
-//   socket.emit("register-did", "did:ethr:sepolia:0x021b59973fd47d895fc9c7ed9741ca4b8476360414001fc075abbac7c6d8cbd88a");
-// });
+  socket.on("register-did", (did: string) => {
+    console.log("Registered DID:", did);
+    const existing = didToSocketMap.get(did);
+    didToSocketMap.set(did, {
+      socket,
+      challenge: existing?.challenge,
+      from: existing?.from,
+    });
+  });
 
-// socket.on("ownership-challenge", ({ from, challenge }) => {
-//   console.log("Received challenge from:", from, "Challenge:", challenge);
-// });
-
-
-// io.on("connection", (socket) => {
-
-//   console.log("New socket connection:", socket.id);
-//   socket.on("register-did", (did) => {
-//     console.log("Registered DID:", did);
-//     didToSocketMap.set(did, {
-//       socket,
-//       timeout: setTimeout(() => {}, 0),
-//       challenge: "",
-//     });
-//   });
-
-//   socket.on("disconnect", () => {
-//     for (const [did, entry] of didToSocketMap.entries()) {
-//       if (entry.socket.id === socket.id) {
-//         didToSocketMap.delete(did);
-//         console.log(`DID ${did} disconnected.`);
-//       }
-//     }
-//   });
-
-//   socket.on("ownership-challenge", async ({ from, challenge }) => {
-//     console.log("Received ownership challenge from:", from);
-//     console.log("Challenge:", challenge);
-//     // Here you’d sign the challenge and send it back
-//     // e.g., via a POST to /prove-ownership or a socket event:
-//     // socket.emit("ownership-proof", { verifierDID: from, signedChallenge });
-//   });
-
-// });
+  socket.on("disconnect", () => {
+    for (const [did, entry] of didToSocketMap.entries()) {
+      if (entry.socket && entry.socket.id === socket.id) {
+        // Keep the challenge data but remove socket reference
+        didToSocketMap.set(did, {
+          socket: null,
+          challenge: entry.challenge,
+          from: entry.from,
+        });
+        console.log(`DID ${did} disconnected.`);
+      }
+    }
+  });
+});
 
 // Get DID identifiers + balance
 app.get("/identifiers", async (_req: Request, res: Response) => {
@@ -349,9 +336,13 @@ app.post(
   }
 );
 
-app.post("/verify-ownership", (req, res) => verifyOwnership(req, res));
+app.post("/verify-ownership", async (req, res) => {
+  await verifyOwnership(req, res);
+});
 
-app.post("/receive-credential", (req, res) => receiveCredential(req, res));
+app.post("/receive-credential", async (req, res) => {
+  await receiveCredential(req, res);
+});
 
 app.post("/service-response", (req, res) =>
   handleServiceResponse(null, req, res)
