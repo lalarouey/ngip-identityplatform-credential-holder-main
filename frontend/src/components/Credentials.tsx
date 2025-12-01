@@ -7,6 +7,7 @@ import { TRegistryVC } from "types";
 interface ICredentialsProps {
   vcList: VerifiableCredential[];
   registryList: TRegistryVC[];
+  dids: string[];
 }
 
 interface ICredentialProps {
@@ -158,14 +159,28 @@ function formatDate(dateString: string): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
-const Credentials = ({ vcList, registryList }: ICredentialsProps) => {
+const Credentials = ({ vcList, registryList, dids }: ICredentialsProps) => {
   const [credentials, setCredentials] = useState(vcList);
+  const [localRegistryList, setLocalRegistryList] = useState(registryList);
+
+  useEffect(() => {
+    setLocalRegistryList(registryList);
+  }, [registryList]);
 
   const refresh = async () => {
     try {
       const res = await fetch(`${API_URL}/credentials`);
       const data = await res.json();
       setCredentials(data.ipfsData || []);
+
+      if (dids && dids.length > 0) {
+        const registryRes = await fetch(
+          `${API_URL}/check-revocation-status/${dids[0]}`
+        );
+        const registryData = await registryRes.json();
+        setLocalRegistryList(registryData.result || []);
+      }
+
       notifications.show({ message: "Refreshed", color: "green" });
     } catch (err) {
       console.error(err);
@@ -174,22 +189,10 @@ const Credentials = ({ vcList, registryList }: ICredentialsProps) => {
   };
 
   const isRevoked = (vcID: string): boolean => {
-    const match = registryList.find((r) => r.vcID === vcID);
+    const match = localRegistryList.find((r) => r.vcID === vcID);
     if (!match) return true;
     return match.revoked || match.ttl * 1000 < Date.now();
   };
-
-  // const handleRequest = async (event?: React.MouseEvent<HTMLButtonElement>) => {
-  //   event?.preventDefault();
-
-  //   if (!socket.connected) {
-  //     console.error("Socket not connected");
-  //     return;
-  //   }
-
-  //   socket.emit("get-credentials");
-  //   socket.emit("check-revocation-status");
-  // };
 
   return (
     <div

@@ -51,7 +51,7 @@ export default function CredentialHolder() {
 
       // Set up Socket.IO connection
       const newSocket = io("http://localhost:3002");
-      
+
       newSocket.on("connect", () => {
         console.log("Socket connected");
         // Register the holder DID with the socket
@@ -95,6 +95,15 @@ export default function CredentialHolder() {
       const credsRes = await fetch("http://localhost:3002/credentials");
       const credsData = await credsRes.json();
       setVcList(credsData.ipfsData || []);
+
+      // Fetch Registry List (Revocation Status)
+      if (data.holderDIDs && data.holderDIDs.length > 0) {
+        const registryRes = await fetch(
+          `http://localhost:3002/check-revocation-status/${data.holderDIDs[0]}`
+        );
+        const registryData = await registryRes.json();
+        setRegistryList(registryData.result || []);
+      }
     } catch (err) {
       console.error(err);
       notifications.show({
@@ -123,7 +132,7 @@ export default function CredentialHolder() {
     switch (activeTab) {
       case "credentials":
         return (
-          <CredentialDashboard vcList={vcList} registryList={registryList}  dids={dids}/>
+          <CredentialDashboard vcList={vcList} registryList={registryList} dids={dids} />
         );
       case "requestCredential":
         return (

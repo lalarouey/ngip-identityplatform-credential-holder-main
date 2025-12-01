@@ -21,9 +21,9 @@ export function CredentialDashboard({
   const renderComponent = () => {
     switch (activeSubTab) {
       case "credentials":
-        return <Credentials vcList={vcList} registryList={registryList} />;
+        return <Credentials vcList={vcList} registryList={registryList} dids={dids} />;
       case "createCredential":
-        return <CreateCredential dids={dids}/>;
+        return <CreateCredential dids={dids} />;
       default:
         "credentialRequests";
     }
