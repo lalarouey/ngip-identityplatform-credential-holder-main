@@ -92,19 +92,35 @@ export async function addEncryptionKey(
       kms: "local",
     });
 
-    const txHash = await agent.didManagerAddKey({
-      did,
-      key,
-      options: { ttl: validFor ?? 86400 * 2 },
+    // const txHash = await agent.didManagerAddKey({
+    //   did,
+    //   key,
+    //   options: { ttl: validFor ?? 86400 * 2 },
+    // });
+    const result = await agent.didManagerAddKey({
+      did: did,
+      key: key,
+      options: { ttl: validFor ? validFor : 86400 * 2 }, // valid for 2 days
     });
-
-    const receipt: TransactionReceipt | null =
-      await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT);
-
-    if (!receipt || receipt.status !== 1) {
-      throw new Error(`Transaction failed: ${txHash}`);
+    if (did.startsWith("did:web:")) {
+      console.log(`Encryption key added to identifier: ${did}`, key);
+      return true;
     }
+    const txHash = result as string;
 
+    // const receipt: TransactionReceipt | null =
+    //   await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT);
+
+    // if (!receipt || receipt.status !== 1) {
+    //   throw new Error(`Transaction failed: ${txHash}`);
+    // }
+    if (typeof txHash === "string" && txHash.startsWith("0x")) {
+      const receipt: TransactionReceipt | null =
+        await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT); // Wait for the transaction to be mined
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(`Transaction failed: ${txHash}`);
+      }
+    }
     console.log(`Encryption key added to identifier: ${did}`, key);
     return true;
   } catch (error) {

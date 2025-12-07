@@ -6,7 +6,9 @@ import {
   getCredentialsForHolder,
   isCredentialRevoked,
   issueCredential,
+  issueDelegationCredential,
   revokeCredential,
+  revokeDelegationCredential,
   verifyCredential,
 } from "../credentials.js";
 import { resolveDIDCommMessage, sendDIDCommMessage } from "../didcomm.js";
@@ -172,9 +174,7 @@ export async function getVCs() {
   console.log(`[${timestamp}] Getting VCs...`);
   try {
     const IPFSData = await mapAndGetCredentials();
-
     const credentialIDs = IPFSData.map((data) => data.id);
-
     console.log(`[${timestamp}] VCs received:`, credentialIDs);
     return IPFSData;
   } catch (error) {
@@ -417,8 +417,8 @@ async function validateDID(did: string) {
     console.log(
       `No usable keyAgreement found for DID ${did}. 
        Available verification methods: ${JSON.stringify(
-         didDoc.verificationMethod || []
-       )}`
+        didDoc.verificationMethod || []
+      )}`
     );
   }
 
@@ -487,7 +487,7 @@ async function mapAndGetCredentials() {
           continue;
         }
       }
-      
+
       // If all keys failed, log the error
       console.error(`Failed to decrypt credential for ID ${id} with any available key`);
       return null;
@@ -506,4 +506,91 @@ function isEncryptedVC(data: any): data is TEncryptedVC {
     typeof data?.id === "string" &&
     typeof data?.encryptedCredential === "string"
   );
+}
+
+export async function issueDelegationVC(
+  holderDID: string,
+  recipientDID: string,
+  credentialData: { [key: string]: any },
+  credentialName?: string
+) {
+  console.log(`[${new Date().toISOString()}] Issuing Delegation VC`);
+  try {
+    const { credential, txResponse } = await issueDelegationCredential(
+      holderDID,
+      recipientDID,
+      credentialData,
+      86400
+    );
+
+    if (!credential || !txResponse) {
+      throw new Error("Failed to issue delegation VC");
+    }
+
+    await uploadVC(credential);
+
+    await execute(
+      db,
+      `INSERT OR IGNORE INTO issued_delegations (vcID, holderDID, recipientDID, credentialName, issuanceDate) VALUES (?, ?, ?, ?, ?)`,
+      [
+        credential.id,
+        holderDID,
+        recipientDID,
+        credentialName || "Delegation VC",
+        new Date().toISOString(),
+      ]
+    );
+
+    await sendDIDCommMessage(
+      holderDID,
+      recipientDID,
+      credential,
+      "receiveCredential",
+      "authcrypt"
+    );
+
+    return credential;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to issue delegation VC";
+    console.error(
+      `[${new Date().toISOString()}] Error issuing delegation VC:`,
+      error
+    );
+    throw errorMessage;
+  }
+}
+
+export async function revokeDelegationVC(
+  issuerDID: string,
+  subjectDID: string,
+  credentialID: string
+) {
+  console.log(`[${new Date().toISOString()}] Revoking Delegation VC`);
+  try {
+    const receipt = await revokeDelegationCredential(
+      issuerDID,
+      subjectDID,
+      credentialID
+    );
+    if (!receipt) {
+      throw new Error("Failed to revoke delegation VC");
+    }
+
+    await execute(
+      db,
+      `UPDATE issued_delegations SET revoked = 1 WHERE vcID = ?`,
+      [credentialID]
+    );
+
+    return receipt;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to revoke delegation VC";
+    console.error(
+      `[${new Date().toISOString()}] Error revoking delegation VC:`,
+      error
+    );
+    throw errorMessage;
+  }
 }

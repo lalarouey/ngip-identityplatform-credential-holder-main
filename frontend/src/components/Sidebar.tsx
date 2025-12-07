@@ -9,18 +9,22 @@ export default function Sidebar({
   disconnectSocket,
 }: {
   activeTab:
-    | 'credentials'
-    | 'requestCredential'
-    | 'challenge'
-    | 'requestService'
-    | 'myPage'
-    | null;
+  | 'credentials'
+  | 'requestCredential'
+  | 'challenge'
+  | 'requestService'
+  | 'requestService'
+  | 'delegation'
+  | 'myPage'
+  | null;
   setActiveTab: React.Dispatch<
     React.SetStateAction<
       | 'credentials'
       | 'requestCredential'
       | 'challenge'
       | 'requestService'
+      | 'requestService'
+      | 'delegation'
       | 'myPage'
       | null
     >
@@ -74,7 +78,7 @@ export default function Sidebar({
           onClick={connected ? disconnectSocket : connectSocket}
         >
           {connected ? 'Disconnect Socket' : 'Connect Socket'}
-        </Button> 
+        </Button>
         <Indicator color={connected ? 'green' : 'red'} />
       </Container>
       <Container
@@ -87,7 +91,7 @@ export default function Sidebar({
         }}
       >
         <NavLink
-          label='Credentials'
+          label='Medical Records'
           color={
             activeTab == 'credentials' ? ACTIVE_TAB_COLOR : BACKGROUND_COLOR
           }
@@ -100,7 +104,7 @@ export default function Sidebar({
           }}
         />
         <NavLink
-          label='Request Credential'
+          label='Request Medical Record'
           color={
             activeTab == 'requestCredential'
               ? ACTIVE_TAB_COLOR
@@ -133,6 +137,19 @@ export default function Sidebar({
           active
           variant='filled'
           onClick={() => setActiveTab('requestService')}
+          disabled={!connected}
+          style={{
+            height: '50px',
+          }}
+        />
+        <NavLink
+          label='Grant Access (Doctor)'
+          color={
+            activeTab == 'delegation' ? ACTIVE_TAB_COLOR : BACKGROUND_COLOR
+          }
+          active
+          variant='filled'
+          onClick={() => setActiveTab('delegation')}
           disabled={!connected}
           style={{
             height: '50px',

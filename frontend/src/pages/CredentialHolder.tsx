@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { TRegistryVC, TSchema } from "types";
 import { CredentialDashboard } from "./CredentialDashboard";
+import { DelegationDashboard } from "components/DelegationDashboard";
 
 export default function CredentialHolder() {
   const [vcList, setVcList] = useState<VerifiableCredential[]>([]);
@@ -20,6 +21,8 @@ export default function CredentialHolder() {
     | "requestCredential"
     | "challenge"
     | "requestService"
+    | "requestService"
+    | "delegation"
     | "myPage"
     | null
   >(null);
@@ -159,6 +162,8 @@ export default function CredentialHolder() {
             setServiceStatus={setServiceStatus}
           />
         );
+      case "delegation":
+        return <DelegationDashboard dids={dids} />;
       case "myPage":
         return <MyPage ethAddress={ethAddress} dids={dids} balance={balance} />;
       default:
@@ -194,6 +199,11 @@ export default function CredentialHolder() {
           overflowY: "auto", // Allow scrolling for large content
         }}
       >
+        {connected && (
+          <div style={{ padding: '20px', borderBottom: '1px solid #eee', backgroundColor: '#f8f9fa' }}>
+            <h1 style={{ margin: 0, color: '#1e3a8a' }}>Patient Portal</h1>
+          </div>
+        )}
         {connected && renderComponent()}
       </div>
     </div>

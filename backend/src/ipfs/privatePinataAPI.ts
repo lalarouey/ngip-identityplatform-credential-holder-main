@@ -28,7 +28,6 @@ async function uploadPrivateJSONObject(object: any): Promise<UploadResponse> {
 async function getPrivateJSONObject(cid: string): Promise<GetCIDResponse> {
   try {
     console.log("CID: ", cid);
-    console.log(pinata.config?.pinataJwt, pinata.config?.pinataGateway);
     const file = await pinata.gateways.get(cid);
     console.log("Pinata file: ", file);
     if (!file) {
@@ -36,7 +35,7 @@ async function getPrivateJSONObject(cid: string): Promise<GetCIDResponse> {
     }
     return file;
   } catch (error) {
-    console.error(error);
+    console.log(`Failed to get private JSON object from IPFS: ${error}`);
     throw error;
   }
 }

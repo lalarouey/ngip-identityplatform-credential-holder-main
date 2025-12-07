@@ -157,6 +157,95 @@ export async function issueCredentialWithSignature(
 }
 
 /**
+ * Issue a delegation credential (Patient issues to Doctor)
+ */
+export async function issueDelegationCredential(
+  issuerDIDUrl: string, // Patient
+  subjectDIDUrl: string, // Doctor
+  values: CredentialSubject | undefined,
+  TimeToLive: number,
+): Promise<{
+  credential: VerifiableCredential;
+  txResponse: TransactionReceipt;
+}> {
+  console.log(`Resolving issuer DID...`);
+  const issuerDID = await agent.didManagerGet({ did: issuerDIDUrl });
+
+  const date = new Date();
+  const expirationDate = new Date(
+    date.getTime() + TimeToLive * 1000,
+  ).toISOString();
+  const issuanceDate = date.toISOString();
+  const credentialId = `urn:uuid:${crypto.randomUUID()}`;
+  const credential = await agent.createVerifiableCredential({
+    credential: {
+      id: credentialId,
+      ttl: TimeToLive,
+      expirationDate,
+      issuanceDate,
+      issuer: { id: issuerDID.did },
+      credentialSubject: {
+        id: subjectDIDUrl,
+        ...values,
+      },
+      type: ['VerifiableCredential', 'DelegatedAccessCredential'],
+    },
+    proofFormat: 'jwt',
+  });
+
+  const issuerEthAddress = await getEthAddress(issuerDID.did);
+  const subjectEthAddress = await getEthAddress(subjectDIDUrl);
+
+  const nonce = await readContract(
+    CREDENTIAL_REVOCATION_REGISTRY_CONTRACT,
+    'getNonce',
+    [issuerEthAddress],
+  );
+
+  const hash = ethers.solidityPackedKeccak256(
+    ['address', 'uint256', 'address', 'string', 'uint256', 'string'],
+    [
+      CREDENTIAL_REVOCATION_REGISTRY_CONTRACT.ADDRESS,
+      nonce,
+      subjectEthAddress, // Holder/Subject
+      credentialId,
+      new Date(expirationDate).getTime(),
+      'ISSUE',
+    ],
+  );
+
+  const signedHash = await agent.keyManagerSign({
+    keyRef: issuerDID.keys[0].kid,
+    data: hash,
+    algorithm: 'eth_signMessage',
+    encoding: 'hex',
+  });
+
+  const signature = ethers.Signature.from(signedHash);
+
+  const tx = await connectToContract(
+    issuerDID.did,
+    CREDENTIAL_REVOCATION_REGISTRY_CONTRACT,
+    'issueCredentialWithSignature',
+    [
+      subjectEthAddress,
+      credentialId,
+      new Date(expirationDate).getTime(),
+      nonce,
+      signature.v,
+      signature.r,
+      signature.s,
+    ],
+    0,
+    CHAIN_ID,
+  );
+
+  if (!tx) throw new Error('Transaction failed');
+
+  return { credential, txResponse: tx };
+}
+
+/**
  * Issue a verifiable credential to a holder DID with a schema
  * @param holderDIDUrl DID URL of the holder
  * @param values Values to be included in the credential
@@ -338,6 +427,57 @@ export async function revokeCredentialWithSignature(
     CREDENTIAL_REVOCATION_REGISTRY_CONTRACT,
     'revokeCredentialWithSignature',
     [holderAddress, credentialId, nonce, signature.v, signature.r, signature.s],
+    0,
+    CHAIN_ID,
+  );
+
+  if (!tx) throw new Error('Transaction failed');
+  return tx;
+}
+
+/**
+ * Revoke a delegation credential (Patient revokes Doctor's access)
+ */
+export async function revokeDelegationCredential(
+  issuerDIDUrl: string, // Patient (Signer)
+  subjectDIDUrl: string, // Doctor (Holder)
+  credentialId: string,
+): Promise<TransactionReceipt | null> {
+  const issuerDID = await agent.didManagerGet({ did: issuerDIDUrl });
+  const issuerAddress = await getEthAddress(issuerDIDUrl);
+  const subjectAddress = await getEthAddress(subjectDIDUrl);
+
+  const nonce = await readContract(
+    CREDENTIAL_REVOCATION_REGISTRY_CONTRACT,
+    'getNonce',
+    [issuerAddress],
+  );
+
+  const hash = ethers.solidityPackedKeccak256(
+    ['address', 'uint256', 'address', 'string', 'string'],
+    [
+      CREDENTIAL_REVOCATION_REGISTRY_CONTRACT.ADDRESS,
+      nonce,
+      subjectAddress, // Holder/Subject
+      credentialId,
+      'REVOKE',
+    ],
+  );
+
+  const signedMessage = await agent.keyManagerSign({
+    keyRef: issuerDID.keys[0].kid,
+    data: hash,
+    algorithm: 'eth_signMessage',
+    encoding: 'hex',
+  });
+
+  const signature = ethers.Signature.from(signedMessage);
+
+  const tx = await connectToContract(
+    issuerDID.did,
+    CREDENTIAL_REVOCATION_REGISTRY_CONTRACT,
+    'revokeCredentialWithSignature',
+    [subjectAddress, credentialId, nonce, signature.v, signature.r, signature.s],
     0,
     CHAIN_ID,
   );

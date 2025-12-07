@@ -147,7 +147,73 @@ export async function clearDID(did: string) {
  * @throws Error if the DID document is not found
  */
 export async function resolveDIDDocument(did: string): Promise<DIDDocument> {
+  console.log("Did to resolve: ", did);
+  if (did.startsWith("did:web:")) {
+    try {
+      const identifier = await agent.didManagerGet({ did });
+      if (identifier) {
+        // Construct DID document from the local identifier
+        // Veramo's WebDIDProvider should be able to generate the document
+        // Try to resolve it using the provider's internal method
+        const { didDocument } = await agent.resolveDid({ didUrl: did });
+        if (didDocument) {
+          return didDocument;
+        }
+        // If resolution fails, construct a basic DID document from the identifier
+        // This is a fallback for locally managed did:web DIDs that aren't hosted yet
+        const verificationMethod: any[] = [];
+        const keyAgreementIds: string[] = [];
+
+        identifier.keys
+          .filter((key) => key.type === "Secp256k1")
+          .forEach((key) => {
+            const vmId = `${did}#${key.kid}`;
+            verificationMethod.push({
+              id: vmId,
+              type: "EcdsaSecp256k1VerificationKey2019",
+              controller: did,
+              publicKeyHex: key.publicKeyHex,
+            });
+          });
+
+        identifier.keys
+          .filter((key) => key.type === "X25519")
+          .forEach((key) => {
+            const vmId = `${did}#${key.kid}`;
+            verificationMethod.push({
+              id: vmId,
+              type: "X25519KeyAgreementKey2019",
+              controller: did,
+              publicKeyHex: key.publicKeyHex,
+            });
+            keyAgreementIds.push(vmId);
+          });
+
+        const services = identifier.services?.map((service) => ({
+          id: service.id || `${did}#${service.type}`,
+          type: service.type,
+          serviceEndpoint: service.serviceEndpoint,
+        })) || [];
+
+        return {
+          id: did,
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/secp256k1-2019/v1",
+            "https://w3id.org/security/suites/x25519-2019/v1",
+          ],
+          verificationMethod: verificationMethod.length > 0 ? verificationMethod : undefined,
+          keyAgreement: keyAgreementIds.length > 0 ? keyAgreementIds : undefined,
+          service: services.length > 0 ? services : undefined,
+        } as DIDDocument;
+      }
+    } catch (error) {
+      console.log(`Local lookup failed for ${did}, trying normal resolution:`, error);
+    }
+  }
+
   const { didDocument } = await agent.resolveDid({ didUrl: did });
+  console.log("Resolved did document: ", didDocument);
   if (!didDocument) throw new Error("DID document not found");
   return didDocument;
 }
@@ -464,7 +530,7 @@ export async function getEncryptedKeyFromDID(
   const available = keys.map((k) => k.type).join(", ") || "none";
   throw new Error(
     `No usable key found for DID ${did}. Available types: ${available}. ` +
-      `Ensure the DID Document has a keyAgreement entry with X25519KeyAgreementKey2020 or JsonWebKey2020 (crv: X25519).`
+    `Ensure the DID Document has a keyAgreement entry with X25519KeyAgreementKey2020 or JsonWebKey2020 (crv: X25519).`
   );
 }
 
@@ -574,8 +640,7 @@ export async function connectToContract(
     const txReceipt = await txResponse.wait(1, TX_TIMEOUT);
     const elapsedTime = Date.now() - startTime;
     console.log(
-      `Transaction confirmed in ${elapsedTime / 1000} seconds. Block number: ${
-        txReceipt?.blockNumber
+      `Transaction confirmed in ${elapsedTime / 1000} seconds. Block number: ${txReceipt?.blockNumber
       }`
     );
 

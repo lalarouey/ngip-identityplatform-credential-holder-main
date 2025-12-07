@@ -6,7 +6,7 @@ import express, { Request, Response } from "express";
 import http from "http";
 import sqlite3 from "sqlite3";
 import { allowedOrigins } from "../config.js";
-import { execute } from "../ipfsRegister.js";
+import { execute, fetchAll } from "../ipfsRegister.js";
 import {
   challengeResponse,
   verifyOwnership,
@@ -15,10 +15,12 @@ import { getSchema, getSchemaNames } from "../server/schemaRequests.js";
 import {
   checkRevocationStatus,
   getVCs,
+  issueDelegationVC,
   receiveCredential,
   removeVC,
   requestVC,
   requestVCWithPhysicalVerification,
+  revokeDelegationVC,
   selfIssueVC,
   verifyVC,
 } from "../server/VcRequests.js";
@@ -69,6 +71,25 @@ await execute(
   []
 );
 
+// await execute(
+//   db,
+//   `DELETE FROM cids`,
+//   []
+// );
+
+await execute(
+  db,
+  `CREATE TABLE IF NOT EXISTS issued_delegations (
+    vcID TEXT PRIMARY KEY,
+    holderDID TEXT NOT NULL,
+    recipientDID TEXT NOT NULL,
+    credentialName TEXT,
+    issuanceDate TEXT,
+    revoked BOOLEAN DEFAULT 0
+  )`,
+  []
+);
+
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
@@ -81,7 +102,7 @@ const webIdentifier = await agent.didManagerGetOrCreate({
   alias: "example.com",
   provider: "did:web",
 });
-
+console.log("web did document: ", webIdentifier);
 const holderDIDs = [ethIdentifier.did, webIdentifier.did];
 const ethAddress = await getEthAddress(ethIdentifier.did);
 
@@ -236,6 +257,35 @@ app.post("/issue-vc", async (req: Request, res: Response) => {
   }
 });
 
+// Issue Delegation VC
+app.post("/issue-delegation-vc", async (req: Request, res: Response) => {
+  const { holderDID, recipientDID, credentialData, credentialName } = req.body;
+  try {
+    const credential = await issueDelegationVC(
+      holderDID,
+      recipientDID,
+      credentialData,
+      credentialName
+    );
+    res.json({ message: "Delegation VC issued", credential });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to issue Delegation VC" });
+  }
+});
+
+// Revoke Delegation VC
+app.post("/revoke-delegation-vc", async (req: Request, res: Response) => {
+  const { issuerDID, subjectDID, credentialID } = req.body;
+  try {
+    await revokeDelegationVC(issuerDID, subjectDID, credentialID);
+    res.json({ message: "Delegation VC revoked" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to revoke Delegation VC" });
+  }
+});
+
 // Verify VC
 app.post("/verify-vc", async (req: Request, res: Response) => {
   const { credential } = req.body;
@@ -289,6 +339,21 @@ app.get(
     }
   }
 );
+
+// Get Issued Delegations
+app.get("/issued-delegations", async (req: Request, res: Response) => {
+  const { holderDID } = req.query;
+  try {
+    const delegations = await fetchAll(
+      db,
+      "SELECT * FROM issued_delegations WHERE holderDID = ?",
+      [holderDID]
+    );
+    res.json({ message: "Delegations retrieved", delegations });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch delegations" });
+  }
+});
 
 // Request Service
 app.post("/request-service", async (req: Request, res: Response) => {
