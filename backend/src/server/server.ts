@@ -33,6 +33,7 @@ import {
 } from "../utils.js";
 import { getAgent } from "../veramo/agents.js";
 import { ethSepoliaProvider } from "../veramo/providers.js";
+import { setAgentGetter } from "../veramo/resolver.js";
 import { handleServiceResponse, requestService } from "./serviceRequests.js";
 import { resolveDIDCommMessage } from "src/didcomm.js";
 import { Server } from "socket.io";
@@ -50,6 +51,9 @@ export const agent = await getAgent({
     { method: "web", name: "did:web" },
   ],
 });
+
+// Set agent getter for did:web resolver
+setAgentGetter(() => agent);
 
 const port = Number(process.env.PORT) || 3002;
 const app = express();

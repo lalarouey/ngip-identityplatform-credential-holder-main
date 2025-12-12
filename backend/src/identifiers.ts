@@ -19,20 +19,30 @@ export async function createIdentifier(alias?: string): Promise<IIdentifier> {
       kms: "local",
     });
 
-    const txHash = await agent.didManagerAddKey({
+    const result = await agent.didManagerAddKey({
       did: identifier.did,
       key,
       options: { ttl: 86400 * 7 }, // valid for 7 days
     });
 
-    const receipt = await ethSepoliaProvider.waitForTransaction(
-      txHash,
-      1,
-      TX_TIMEOUT
-    );
+    // For did:web DIDs, result is not a transaction hash, so skip waiting for transaction
+    if (identifier.did.startsWith("did:web:")) {
+      console.log(`X25519 encryption key added to DID: ${identifier.did}`);
+      return identifier;
+    }
 
-    if (!receipt || receipt.status !== 1) {
-      throw new Error(`Failed to add X25519 key: ${txHash}`);
+    // For blockchain-based DIDs (like did:ethr), wait for transaction
+    const txHash = result as string;
+    if (typeof txHash === "string" && txHash.startsWith("0x")) {
+      const receipt = await ethSepoliaProvider.waitForTransaction(
+        txHash,
+        1,
+        TX_TIMEOUT
+      );
+
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(`Failed to add X25519 key: ${txHash}`);
+      }
     }
     console.log(`X25519 encryption key added to DID: ${identifier.did}`);
   } catch (err) {
@@ -137,7 +147,7 @@ export async function addService(
   service: { type: string; serviceEndpoint: string; description?: string },
   validFor: number
 ): Promise<string> {
-  const txHash = await agent.didManagerAddService({
+  const result = await agent.didManagerAddService({
     did,
     service: {
       id: `${did}#${service.type}`,
@@ -148,11 +158,20 @@ export async function addService(
     options: { ttl: validFor ?? 86400 * 2 },
   });
 
-  const receipt: TransactionReceipt | null =
-    await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT);
+  // For did:web DIDs, result is not a transaction hash, so skip waiting for transaction
+  if (did.startsWith("did:web:")) {
+    console.log(`Service added to DID: ${did}`, service.type);
+    return typeof result === "string" ? result : "success";
+  }
 
-  if (!receipt || receipt.status !== 1) {
-    throw new Error(`Transaction failed: ${txHash}`);
+  // For blockchain-based DIDs (like did:ethr), wait for transaction
+  const txHash = result as string;
+  if (typeof txHash === "string" && txHash.startsWith("0x")) {
+    const receipt: TransactionReceipt | null =
+      await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT);
+    if (!receipt || receipt.status !== 1) {
+      throw new Error(`Transaction failed: ${txHash}`);
+    }
   }
 
   console.log("Service added, txHash:", txHash);
@@ -166,13 +185,22 @@ export async function removeService(
   did: string,
   serviceId: string
 ): Promise<string> {
-  const txHash = await agent.didManagerRemoveService({ did, id: serviceId });
+  const result = await agent.didManagerRemoveService({ did, id: serviceId });
 
-  const receipt: TransactionReceipt | null =
-    await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT);
+  // For did:web DIDs, result is not a transaction hash, so skip waiting for transaction
+  if (did.startsWith("did:web:")) {
+    console.log(`Service removed from DID: ${did}`, serviceId);
+    return typeof result === "string" ? result : "success";
+  }
 
-  if (!receipt || receipt.status !== 1) {
-    throw new Error(`Transaction failed: ${txHash}`);
+  // For blockchain-based DIDs (like did:ethr), wait for transaction
+  const txHash = result as string;
+  if (typeof txHash === "string" && txHash.startsWith("0x")) {
+    const receipt: TransactionReceipt | null =
+      await ethSepoliaProvider.waitForTransaction(txHash, 1, TX_TIMEOUT);
+    if (!receipt || receipt.status !== 1) {
+      throw new Error(`Transaction failed: ${txHash}`);
+    }
   }
 
   console.log("Service removed, txHash:", txHash);
