@@ -1,4 +1,4 @@
-import { Button, Card, Flex, Text, Title, TextInput, Stack, Badge, Loader } from '@mantine/core';
+import { Button, Card, Flex, Text, Title, TextInput, Stack, Badge, Loader, Group } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 
@@ -15,11 +15,22 @@ interface IssuedDelegation {
     revoked: number;
 }
 
+interface DelegationRequest {
+    id: string;
+    requesterDID: string;
+    scope: string;
+    purpose: string;
+    audience: string[];
+    expiry: string;
+    receivedAt: string;
+}
+
 export function DelegationDashboard({ dids }: DelegationDashboardProps) {
-    const [activeTab, setActiveTab] = useState<'issue' | 'list'>('issue');
+    const [activeTab, setActiveTab] = useState<'issue' | 'list' | 'requests'>('requests');
     const [recipientDID, setRecipientDID] = useState('');
     const [credentialName, setCredentialName] = useState('');
     const [delegations, setDelegations] = useState<IssuedDelegation[]>([]);
+    const [requests, setRequests] = useState<DelegationRequest[]>([]);
     const [loading, setLoading] = useState(false);
 
     const holderDID = dids[0];
@@ -37,29 +48,51 @@ export function DelegationDashboard({ dids }: DelegationDashboardProps) {
         }
     };
 
+    const fetchRequests = async () => {
+        try {
+            const response = await fetch(`http://localhost:3002/delegation-requests`);
+            if (response.ok) {
+                const data = await response.json();
+                setRequests(data.requests || []);
+            }
+        } catch (error) {
+            console.error("Error fetching requests:", error);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'list') {
             fetchDelegations();
+        } else if (activeTab === 'requests') {
+            fetchRequests();
         }
     }, [activeTab, holderDID]);
 
-    const handleIssue = async () => {
-        if (!holderDID || !recipientDID) {
+    const handleIssue = async (request?: DelegationRequest) => {
+        const targetDID = request ? request.requesterDID : recipientDID;
+
+        if (!holderDID || !targetDID) {
             notifications.show({ message: "Missing required fields", color: "red" });
             return;
         }
         setLoading(true);
         try {
+            const credentialData: any = {
+                permissions: [{ action: "read", resourceType: request?.scope || "medical-records" }],
+                purpose: request?.purpose || "continuityOfCare",
+            };
+
+            if (request?.audience) {
+                credentialData.audience = request.audience;
+            }
+
             const response = await fetch("http://localhost:3002/issue-delegation-vc", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     holderDID,
-                    recipientDID,
-                    credentialData: {
-                        access: "read",
-                        resourceType: "medical-records"
-                    },
+                    recipientDID: targetDID,
+                    credentialData,
                     credentialName: credentialName || "Delegated Access"
                 }),
             });
@@ -111,6 +144,12 @@ export function DelegationDashboard({ dids }: DelegationDashboardProps) {
         <div style={{ padding: '20px', width: '100%' }}>
             <Flex gap="md" mb="lg">
                 <Button
+                    variant={activeTab === 'requests' ? 'filled' : 'outline'}
+                    onClick={() => setActiveTab('requests')}
+                >
+                    Requests
+                </Button>
+                <Button
                     variant={activeTab === 'issue' ? 'filled' : 'outline'}
                     onClick={() => setActiveTab('issue')}
                 >
@@ -123,6 +162,24 @@ export function DelegationDashboard({ dids }: DelegationDashboardProps) {
                     Authorized Doctors
                 </Button>
             </Flex>
+
+            {activeTab === 'requests' && (
+                <Stack>
+                    {requests.length === 0 ? (
+                        <Text>No pending requests.</Text>
+                    ) : (
+                        requests.map((req) => (
+                            <Card key={req.id} withBorder padding="lg" radius="md">
+                                <Title order={4} mb="xs">Request from {req.requesterDID}</Title>
+                                <Text size="sm"><strong>Purpose:</strong> {req.purpose}</Text>
+                                <Text size="sm"><strong>Scope:</strong> {req.scope}</Text>
+                                <Text size="sm" mb="md"><strong>Audience:</strong> {Array.isArray(req.audience) ? req.audience.join(', ') : req.audience}</Text>
+                                <Button onClick={() => handleIssue(req)} loading={loading}>Authorize</Button>
+                            </Card>
+                        ))
+                    )}
+                </Stack>
+            )}
 
             {activeTab === 'issue' && (
                 <Card withBorder padding="lg" radius="md">
@@ -141,7 +198,7 @@ export function DelegationDashboard({ dids }: DelegationDashboardProps) {
                             value={credentialName}
                             onChange={(e) => setCredentialName(e.currentTarget.value)}
                         />
-                        <Button onClick={handleIssue} loading={loading}>Authorize Access</Button>
+                        <Button onClick={() => handleIssue()} loading={loading}>Authorize Access</Button>
                     </Stack>
                 </Card>
             )}

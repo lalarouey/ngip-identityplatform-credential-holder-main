@@ -15,6 +15,7 @@ import { getSchema, getSchemaNames } from "../server/schemaRequests.js";
 import {
   checkRevocationStatus,
   getVCs,
+  getDelegationRequests,
   issueDelegationVC,
   receiveCredential,
   removeVC,
@@ -23,6 +24,7 @@ import {
   revokeDelegationVC,
   selfIssueVC,
   verifyVC,
+  getDelegationStatus,
 } from "../server/VcRequests.js";
 import {
   clearDID,
@@ -90,6 +92,20 @@ await execute(
     credentialName TEXT,
     issuanceDate TEXT,
     revoked BOOLEAN DEFAULT 0
+  )`,
+  []
+);
+
+await execute(
+  db,
+  `CREATE TABLE IF NOT EXISTS delegation_requests (
+    id TEXT PRIMARY KEY,
+    requesterDID TEXT NOT NULL,
+    scope TEXT,
+    purpose TEXT,
+    audience TEXT,
+    expiry TEXT,
+    receivedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
   []
 );
@@ -290,6 +306,16 @@ app.post("/revoke-delegation-vc", async (req: Request, res: Response) => {
   }
 });
 
+// Check Delegation Status
+app.get("/delegation-status/:vcID", async (req: Request, res: Response) => {
+  try {
+    const result = await getDelegationStatus(req.params.vcID);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to check delegation status" });
+  }
+});
+
 // Verify VC
 app.post("/verify-vc", async (req: Request, res: Response) => {
   const { credential } = req.body;
@@ -356,6 +382,16 @@ app.get("/issued-delegations", async (req: Request, res: Response) => {
     res.json({ message: "Delegations retrieved", delegations });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch delegations" });
+  }
+});
+
+// Get Delegation Requests
+app.get("/delegation-requests", async (req: Request, res: Response) => {
+  try {
+    const requests = await getDelegationRequests();
+    res.json({ message: "Delegation requests retrieved", requests });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch delegation requests" });
   }
 });
 

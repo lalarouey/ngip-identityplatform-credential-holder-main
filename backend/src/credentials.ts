@@ -177,19 +177,28 @@ export async function issueDelegationCredential(
   ).toISOString();
   const issuanceDate = date.toISOString();
   const credentialId = `urn:uuid:${crypto.randomUUID()}`;
-  const credential = await agent.createVerifiableCredential({
-    credential: {
-      id: credentialId,
-      ttl: TimeToLive,
-      expirationDate,
-      issuanceDate,
-      issuer: { id: issuerDID.did },
-      credentialSubject: {
-        id: subjectDIDUrl,
-        ...values,
-      },
-      type: ['VerifiableCredential', 'DelegatedAccessCredential'],
+
+  // Extract audience if present in values, as it should be top-level
+  const { audience, purpose, ...credentialSubjectValues } = values || {};
+
+  const credentialPayload: any = {
+    id: credentialId,
+    ttl: TimeToLive,
+    expirationDate,
+    issuanceDate,
+    issuer: { id: issuerDID.did },
+    credentialSubject: {
+      id: subjectDIDUrl,
+      ...credentialSubjectValues,
     },
+    type: ['VerifiableCredential', 'DelegatedAccessCredential'],
+  };
+
+  if (audience) credentialPayload.audience = audience;
+  if (purpose) credentialPayload.purpose = purpose; // Custom field, or could be in credentialSubject
+
+  const credential = await agent.createVerifiableCredential({
+    credential: credentialPayload,
     proofFormat: 'jwt',
   });
 

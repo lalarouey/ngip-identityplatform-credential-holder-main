@@ -139,29 +139,52 @@ export async function receiveCredential(req: Request, res: Response) {
   try {
     const unpackedDIDCommMessage = await resolveDIDCommMessage(req.body);
 
-    if (!unpackedDIDCommMessage?.message?.body) {
+    if (!unpackedDIDCommMessage?.message) {
       return res.status(400).json({ error: "Invalid DIDComm message format" });
     }
 
-    const credential = unpackedDIDCommMessage.message.body;
+    const { type, body } = unpackedDIDCommMessage.message;
+
+    if (type === "https://didcomm.org/present-proof/3.0/request-presentation") {
+      // Handle Delegation Request
+      const { requesterDID, scope, purpose, audience, expiry } = body as any;
+      const id = unpackedDIDCommMessage.message.id;
+
+      await execute(
+        db,
+        `INSERT OR IGNORE INTO delegation_requests (id, requesterDID, scope, purpose, audience, expiry) VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, requesterDID, scope, purpose, JSON.stringify(audience), expiry]
+      );
+
+      console.log(`[${new Date().toISOString()}] Received delegation request from ${requesterDID}`);
+      return res.status(200).json({ message: "Delegation request received" });
+    }
+
+    // Default: Handle as Credential
+    const credential = body;
 
     // Save credential first
     await uploadVC(credential);
-
-    // // Emit event after saving
-    // io.emit("vc-received", credential);
 
     // Respond to client after success
     return res
       .status(200)
       .json({ message: "Credential received successfully", credential });
   } catch (error) {
-    console.error("Error processing credential:", error);
+    console.error("Error processing message:", error);
 
     return res
       .status(500)
       .json({ error: "An error occurred handling the message" });
   }
+}
+
+export async function getDelegationRequests() {
+  const rows = (await fetchAll(db, "SELECT * FROM delegation_requests ORDER BY receivedAt DESC", [])) as any[];
+  return rows.map((row: any) => ({
+    ...row,
+    audience: JSON.parse(row.audience || "[]"),
+  }));
 }
 
 /**
@@ -593,4 +616,18 @@ export async function revokeDelegationVC(
     );
     throw errorMessage;
   }
+}
+
+export async function getDelegationStatus(vcID: string) {
+  const row = (await fetchFirst(
+    db,
+    "SELECT revoked FROM issued_delegations WHERE vcID = ?",
+    [vcID]
+  )) as { revoked: number };
+
+  if (!row) {
+    throw new Error("Delegation not found");
+  }
+
+  return { revoked: !!row.revoked };
 }
