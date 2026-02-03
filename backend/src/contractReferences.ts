@@ -6,7 +6,8 @@ type TContract = {
 };
 
 const SCHEMA_REGISTRY_CONTRACT: TContract = Object.freeze({
-  ADDRESS: '0xc4D242d66D313ce1E198DaC9ccEbfe5430de954D',
+  // ADDRESS: '0xc4D242d66D313ce1E198DaC9ccEbfe5430de954D',
+  ADDRESS: '0x8ceE552B1E5159A05F75DEB836760d55A70cFe79',
   ABI: Object.freeze([
     {
       inputs: [
